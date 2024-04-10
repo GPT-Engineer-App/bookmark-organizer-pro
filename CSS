@@ -1,0 +1,89 @@
+import { useState, useEffect } from "react";
+import { Image } from "@chakra-ui/react";
+
+export default function Home() {
+  const [bookmarks, setBookmarks] = useState<chrome.bookmarks.BookmarkTreeNode[]>([]);
+  const [sortedBookmarks, setSortedBookmarks] = useState<chrome.bookmarks.BookmarkTreeNode[]>([]);
+  const [categories, setCategories] = useState<{ [key: string]: chrome.bookmarks.BookmarkTreeNode[] }>({});
+  const [brokenLinks, setBrokenLinks] = useState<string[]>([]);
+
+  useEffect(() => {
+    // Retrieve bookmarks from Chrome
+    chrome.bookmarks.getTree((tree) => {
+      setBookmarks(tree);
+      sortAndOrganizeBookmarks(tree);
+      checkForBrokenLinks(tree);
+    });
+  }, []);
+
+  const sortAndOrganizeBookmarks = (tree: chrome.bookmarks.BookmarkTreeNode[]) => {
+    // Sort bookmarks by date added
+    const sortedByDate = tree.sort((a, b) => (a.dateAdded || 0) - (b.dateAdded || 0));
+
+    // Organize bookmarks into categories
+    const categories: { [key: string]: chrome.bookmarks.BookmarkTreeNode[] } = {};
+    sortedByDate.forEach((node) => {
+      if (node.url) {
+        const category = node.title.split("/")[0] || "Uncategorized";
+        if (!categories[category]) {
+          categories[category] = [];
+        }
+        categories[category].push(node);
+      }
+    });
+
+    setSortedBookmarks(sortedByDate);
+    setCategories(categories);
+  };
+
+  const checkForBrokenLinks = async (tree: chrome.bookmarks.BookmarkTreeNode[]) => {
+    const brokenLinks: string[] = [];
+    for (const node of tree) {
+      if (node.url) {
+        try {
+          const response = await fetch(node.url);
+          if (!response.ok) {
+            brokenLinks.push(node.url);
+          }
+        } catch (error) {
+          brokenLinks.push(node.url);
+        }
+      }
+    }
+    setBrokenLinks(brokenLinks);
+  };
+
+  return (
+    <div className="p-8">
+      <h1 className="text-2xl font-bold mb-4">Bookmark Sorter, Organizer, and Tester</h1>
+
+      {Object.keys(categories).map((category) => (
+        <div key={category} className="mb-8">
+          <h2 className="text-xl font-bold">{category}</h2>
+          <div className="grid grid-cols-3 gap-4">
+            {categories[category].map((bookmark) => (
+              <div key={bookmark.id} className={`p-4 rounded-md shadow-md ${brokenLinks.includes(bookmark.url || "") ? "bg-red-100" : "bg-white"}`}>
+                <a href={bookmark.url} target="_blank" rel="noopener noreferrer">
+                  <Image src={GPTENG.get_img("employee portrait")} alt={bookmark.title} className="mb-2" />
+                  <h3 className="text-lg font-bold">{bookmark.title}</h3>
+                  <p className="text-gray-500">{bookmark.url}</p>
+                </a>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+
+      {brokenLinks.length > 0 && (
+        <div className="mt-8">
+          <h2 className="text-xl font-bold">Broken Links</h2>
+          <ul className="list-disc pl-6">
+            {brokenLinks.map((link, index) => (
+              <li key={index}>{link}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
